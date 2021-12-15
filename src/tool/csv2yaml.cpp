@@ -4935,47 +4935,44 @@ static bool mob_parse_row_mobskilldb_yaml(void) {
 			body << YAML::Key << "Name" << YAML::Value << it.skill_name;
 			body << YAML::Key << "Level" << YAML::Value << it.skill_lv;
 			if (it.state_name != "BERSERK")
-				body << YAML::Key << "SkillState" << YAML::Value << it.state_name;
+				body << YAML::Key << "State" << YAML::Value << it.state_name;
 
-			if (it.permillage != 10000 || it.casttime > 0 || it.delay != 5000 || !it.cancel) {
-				body << YAML::Key << "Cast";
-				body << YAML::BeginMap;
-				if (it.permillage != 10000)
-					body << YAML::Key << "Rate" << YAML::Value << it.permillage;
-				if (it.casttime > 0)
-					body << YAML::Key << "Time" << YAML::Value << it.casttime;
-				if (it.delay != 5000)
-					body << YAML::Key << "Delay" << YAML::Value << it.delay;
-				if (!it.cancel)
-					body << YAML::Key << "Cancelable" << YAML::Value << "false";
-				// else
-					// body << YAML::Key << "Cancelable" << YAML::Value << "true";	// default true
-				body << YAML::EndMap;
-			}
+		if (it.permillage != 10000)
+			body << YAML::Key << "CastRate" << YAML::Value << it.permillage;
+		if (it.casttime > 0)
+			body << YAML::Key << "CastTime" << YAML::Value << it.casttime;
+		if (it.delay != 5000)
+			body << YAML::Key << "CastDelay" << YAML::Value << it.delay;
+		if (!it.cancel)
+			body << YAML::Key << "CastCancel" << YAML::Value << "false";
 
 			if (it.target_name != "TARGET")
-				body << YAML::Key << "SkillTarget" << YAML::Value << it.target_name;
+				body << YAML::Key << "Target" << YAML::Value << it.target_name;
 
-			if (!it.cond1_name.empty() && it.cond1_name != "ALWAYS" || !it.cond2_name.empty() || !it.val.empty()) {
-				body << YAML::Key << "Condition";
-				body << YAML::BeginMap;
+		if (!it.cond1_name.empty() && it.cond1_name != "ALWAYS")
+			body << YAML::Key << "Condition" << YAML::Value << it.cond1_name;
 
-				if (!it.cond1_name.empty() && it.cond1_name != "ALWAYS")
-					body << YAML::Key << "Cond1" << YAML::Value << it.cond1_name;
-				if (!it.cond2_name.empty()) {
-					if (atoi(it.cond2_name.c_str()) > 0)
-						body << YAML::Key << "Cond2Value" << YAML::Value << it.cond2_name;
-					else
-						body << YAML::Key << "Cond2String" << YAML::Value << it.cond2_name;
-				}
-				for (const auto &valit : it.val) {
-					std::string val_name = "Val" + std::to_string(valit.first);
+		body << YAML::Key << "ConditionValues";
+		body << YAML::BeginMap;
 
-					body << YAML::Key << val_name << YAML::Value << valit.second;
-				}
+		uint16 cond_index = 0;
 
-				body << YAML::EndMap;
-			}
+		body << YAML::Key << "Index" << YAML::Value << cond_index;
+
+		if (!it.cond2_name.empty()) { // Cond2 becomes Val0
+			if (atoi(it.cond2_name.c_str()) > 0)
+				body << YAML::Key << "Value" << YAML::Value << it.cond2_name;
+			else
+				body << YAML::Key << "Value" << YAML::Value << it.cond2_name;
+		}
+
+		for (const auto &valit : it.val) {
+			cond_index++;
+			body << YAML::Key << "Index" << YAML::Value << cond_index;
+			body << YAML::Key << "Value" << YAML::Value << valit.second;
+		}
+
+		body << YAML::EndMap;
 
 			if (!it.emotion.empty())
 				body << YAML::Key << "Emotion" << YAML::Value << it.emotion;

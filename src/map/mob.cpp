@@ -5763,20 +5763,25 @@ uint64 MobSkillDatabase::parseBodyNode(const YAML::Node &node) {
 				if (!this->asUInt16(it, "Level", level))
 					return 0;
 
-				skill->skill_lv = cap_value(level, 1, battle_config.mob_max_skilllvl); //we strip max skill level
+				if (level == 0 || level > battle_config.mob_max_skilllvl) {
+					this->invalidWarning(it["Level"], "Invalid skill level %hu for \"%s\", capping to 1.\n", level, skill_name.c_str());
+					level = 1
+				}
+
+				skill->skill_lv = level;
 			}
 
-			if (this->nodeExists(it, "SkillState")) {
+			if (this->nodeExists(it, "State")) {
 				std::string state_name;
 
-				if (!this->asString(it, "SkillState", state_name))
+				if (!this->asString(it, "State", state_name))
 					return 0;
 
 				std::string state_constant = "MSS_" + state_name;
 				int64 constant;
 
 				if (!script_get_constant(state_constant.c_str(), &constant) || constant < MSS_ANY || constant > MSS_ANYTARGET) {
-					this->invalidWarning(it["SkillState"], "Invalid SkillState %s. Note: \"MSS_\" is appended before the name, MobSkillDatabase is checking the constant \"%s\".\n", state_name.c_str(), state_constant.c_str());
+					this->invalidWarning(it["State"], "Invalid State %s, skipping.\n", state_name.c_str());
 					return 0;
 				}
 				skill->state = static_cast<e_MobSkillState>(constant);
@@ -5785,76 +5790,65 @@ uint64 MobSkillDatabase::parseBodyNode(const YAML::Node &node) {
 					skill->state = MSS_BERSERK;
 			}
 
-			if (this->nodeExists(it, "Cast")) {
-				const YAML::Node &castNode = it["Cast"];
+		if (this->nodeExists(it, "CastRate")) {
+			int16 rate;
 
-				if (this->nodeExists(castNode, "Rate")) {
-					int16 rate;
+			if (!this->asInt16(it, "CastRate", rate))
+				return 0;
 
-					if (!this->asInt16(castNode, "Rate", rate))
-						return 0;
+			skill->permillage = rate;
+		} else {
+			if (!skill_exists)	// note: default by number of occurrences
+				skill->permillage = 10000;
+		}
 
-					skill->permillage = rate;
-				} else {
-					if (!skill_exists)	// note: default by number of occurences
-						skill->permillage = 10000;
-				}
+		if (this->nodeExists(it, "CastTime")) {
+			int32 time;
 
-				if (this->nodeExists(castNode, "Time")) {
-					int32 time;
+			if (!this->asInt32(it, "CastTime", time))
+				return 0;
 
-					if (!this->asInt32(castNode, "Time", time))
-						return 0;
+			skill->casttime = time;
+		} else {
+			if (!skill_exists)
+				skill->casttime = 0;
+		}
 
-					skill->casttime = time;
-				} else {
-					if (!skill_exists)
-						skill->casttime = 0;
-				}
+		if (this->nodeExists(it, "CastDelay")) {
+			int32 delay;
 
-				if (this->nodeExists(castNode, "Delay")) {
-					int32 delay;
+			if (!this->asInt32(it, "CastDelay", delay))
+				return 0;
 
-					if (!this->asInt32(castNode, "Delay", delay))
-						return 0;
+			skill->delay = delay;
+		} else {
+			if (!skill_exists)
+				skill->delay = 5000;
+		}
 
-					skill->delay = delay;
-				} else {
-					if (!skill_exists)
-						skill->delay = 5000;
-				}
+		if (this->nodeExists(it, "CastCancel")) {
+			bool cancel;
 
-				if (this->nodeExists(castNode, "Cancelable")) {
-					bool cancel;
+			if (!this->asBool(it, "CastCancel", cancel))
+				return 0;
 
-					if (!this->asBool(castNode, "Cancelable", cancel))
-						return 0;
+			skill->cancel = cancel;
+		} else {
+			if (!skill_exists)
+				skill->cancel = true;
+		}
 
-					skill->cancel = cancel;
-				} else {
-					if (!skill_exists)
-						skill->cancel = true;
-				}
-			} else {
-				if (!skill_exists) {
-					skill->permillage = 10000;
-					skill->casttime = 0;
-					skill->delay = 5000;
-					skill->cancel = true;
-				}
-			}
-
-			if (this->nodeExists(it, "SkillTarget")) {
+			if (this->nodeExists(it, "Target")) {
 				std::string target_name;
 
-				if (!this->asString(it, "SkillTarget", target_name))
+				if (!this->asString(it, "Target", target_name))
 					return 0;
 
 				std::string target_constant = "MST_" + target_name;
 				int64 constant;
 
 				if (!script_get_constant(target_constant.c_str(), &constant) || constant < MST_TARGET || constant > MST_AROUND) {
-					this->invalidWarning(it["SkillTarget"], "Unrecognized SkillTarget %s. Don't forget that \"MST_\" is appended before the name: MobSkillDatabase is checking if the constant \"%s\" exists.\n", target_name.c_str(), target_constant.c_str());
+					this->invalidWarning(it["Target"], "Invalid Target %s, skipping.\n", target_name.c_str());
 					return 0;
 				}
 				skill->target = static_cast<int16>(constant);
@@ -5863,88 +5857,69 @@ uint64 MobSkillDatabase::parseBodyNode(const YAML::Node &node) {
 					skill->target = MST_TARGET;
 			}
 
-			if (this->nodeExists(it, "Condition")) {
-				const YAML::Node &condNode = it["Condition"];
+		if (this->nodeExists(it, "Condition")) {
+			std::string condition_name;
 
-				if (this->nodeExists(it, "Cond1")) {
-					std::string condition_name;
+			if (!this->asString(it, "Condition", condition_name))
+				return 0;
 
-					if (!this->asString(it, "Cond1", condition_name))
-						return 0;
+			std::string condition_constant = "MSC_" + condition_name;
+			int64 constant;
 
-					std::string condition_constant = "MSC_" + condition_name;
+			if (!script_get_constant(condition_constant.c_str(), &constant) || constant < MSC_ALWAYS || constant > MSC_SPAWN) {
+				this->invalidWarning(it["Condition"], "Invalid Condition %s, skipping.\n", condition_name.c_str());
+				return 0;
+			}
+			skill->cond1 = static_cast<int16>(constant);	// todo eventually change short to enum ?
+		} else {
+			if (!skill_exists)
+				skill->cond1 = MSC_ALWAYS;
+		}
+
+		if (this->nodeExists(it, "ConditionValues")) {
+			for (const YAML::Node &condit : it["ConditionValues"]) {
+				uint16 cond_id;
+
+				if (!this->asUInt16(condit, "Index", cond_id))
+					return 0;
+
+				if (cond_id > 5) {
+					this->invalidWarning(condit["Index"], "Invalid index %hu, skipping.\n");
+					continue;
+				}
+
+				std::string cond_value;
+
+				if (!this->asString(condit, "Value", cond_value))
+					return 0;
+
+				int64 constant;
+
+				if (std::isdigit(cond_value)) // Integer
+					skill->val[cond_id] = cond_value;
+				else { // Constant
+					std::string cond_constant = "SC_" + cond_value;
 					int64 constant;
 
-					if (!script_get_constant(condition_constant.c_str(), &constant) || constant < MSC_ALWAYS || constant > MSC_SPAWN) {
-						this->invalidWarning(it["Cond1"], "Unknown Cond1 %s. Don't forget that \"MSC_\" is appended before the name: MobSkillDatabase is checking if the constant \"%s\" exists.\n", condition_name.c_str(), condition_constant.c_str());
-						return 0;
-					}
-					skill->cond1 = static_cast<int16>(constant);	// todo eventually change short to enum ?
-					
-				} else {
-					if (!skill_exists)
-						skill->cond1 = MSC_ALWAYS;
-				}
+					// We currently only check for SC_ and MobName types
+					std::shared_ptr<s_mob_db> mob = mobdb_search_aegisname(cond_value.c_str());
 
-				// Status and Value fill the same variable
-				if (this->nodeExists(it, "Cond2String")) {	// todo string constant 0 to remove the value on import
-					std::string status_name;
-
-					if (!this->asString(it, "Cond2String", status_name))
-						return 0;
-
-					int64 constant;
-
-					if (!script_get_constant(status_name.c_str(), &constant)) {	// todo sc_ range
-						this->invalidWarning(it["Cond2String"], "Unknown Cond2String %s.\n", status_name.c_str());
-						return 0;
-					}
-					skill->cond2 = static_cast<int16>(constant);	// todo eventually change short to enum ?
-				} else {
-					if (!skill_exists)
-						skill->cond2 = 0;
-				}
-
-				if (this->nodeExists(it, "Cond2Value")) {
-					uint16 value;
-
-					if (!this->asUInt16(it, "Cond2Value", value))
-						return 0;
-
-					skill->cond2 = static_cast<int16>(value);
-				} else {
-					if (!skill_exists)
-						skill->cond2 = 0;
-				}
-
-				for (int i = 0; i < 5; ++i) {	// todo the max number of slaves should be at least 6, Val6 is missing
-					std::string val_name = "Val" + std::to_string(i);
-
-					if (this->nodeExists(it, val_name)) {
-						int32 val;
-
-						if (!this->asInt32(it, val_name, val))
+					if (mob == nullptr) {
+						if (!script_get_constant(cond_value.c_str(), &constant) || constant< SC_STONE || constant >= SC_MAX) {
+							this->invalidWarning(it["Cond1"], "Invalid Value %s, skipping.\n", cond_value.c_str());
 							return 0;
-
-						skill->val[i] = val;
-					} else {
-						if (!skill_exists)
-							skill->val[i] = 0;
+						}
 					}
-				}
-			} else {
-				if (!skill_exists) {
-					skill->cond1 = MSC_ALWAYS;
-					skill->cond2 = 0;
-					skill->val[0] = 0;
-					skill->val[1] = 0;
-					skill->val[2] = 0;
-					skill->val[3] = 0;
-					skill->val[4] = 0;
+
+					skill->val[cond_id] = static_cast<int32>(constant);
 				}
 			}
+		} else {
+			if (!skill_exists)
+				skill->val[] = {};
+		}
 
-			if (this->nodeExists(it, "Emotion")) {	// todo emotion constant -1 to remove the emotion on import
+			if (this->nodeExists(it, "Emotion")) {
 				std::string emotion_name;
 
 				if (!this->asString(it, "Emotion", emotion_name))
@@ -5953,13 +5928,13 @@ uint64 MobSkillDatabase::parseBodyNode(const YAML::Node &node) {
 				int64 constant;
 
 				if (!script_get_constant(emotion_name.c_str(), &constant) || constant < ET_SURPRISE || constant >= ET_MAX) {
-					this->invalidWarning(it["Emotion"], "Unknown Emotion %s.\n", emotion_name.c_str());
+					this->invalidWarning(it["Emotion"], "Invalid Emotion %s, skipping.\n", emotion_name.c_str());
 					return 0;
 				}
 				skill->emotion = static_cast<int16>(constant);
 			} else {
 				if (!skill_exists)
-					skill->emotion = -1;
+					skill->emotion = ET_NONE;
 			}
 
 			if (this->nodeExists(it, "Chat")) {
@@ -5969,7 +5944,7 @@ uint64 MobSkillDatabase::parseBodyNode(const YAML::Node &node) {
 					return 0;
 
 				if (mob_chat_db.find(msg_id) == nullptr) {
-					this->invalidWarning(it["Chat"], "Unknown chat ID %hu.\n", msg_id);
+					this->invalidWarning(it["Chat"], "Unknown chat ID %hu, defaulting to 0.\n", msg_id);
 					msg_id = 0;
 				}
 
@@ -6092,22 +6067,14 @@ static bool mob_read_sqlskilldb_sub(std::vector<std::string> str) {
 	skills["Name"] = skill->name;
 	skills["Level"] = std::stoi(str[++index]);
 
-	YAML::Node cast;
-	cast["Rate"] = std::stoi(str[++index]);
-	cast["Time"] = std::stoi(str[++index]);
-	cast["Delay"] = std::stoi(str[++index]);
-	cast["Cancelable"] = str[++index];
-
-	cast["Cast"] = cast;
+	skills["CastRate"] = std::stoi(str[++index]);
+	skills["CastTime"] = std::stoi(str[++index]);
+	skills["CastDelay"] = std::stoi(str[++index]);
+	skills["CastCancel"] = str[++index];
 
 	skills["Target"] = str[++index];
 
-	YAML::Node Condition;
-	Condition["Cond1"] = str[++index];
-	std::string cond2 = str[++index];
-	if (atoi(cond2.c_str()) > 0)
-		Condition["Cond2Value"] = str[++index];
-	else
+	skills["Condition"] = str[++index];
 		Condition["Cond2String"] = str[++index];
 	Condition["Val0"] = str[++index];
 	Condition["Val1"] = str[++index];
@@ -6115,7 +6082,6 @@ static bool mob_read_sqlskilldb_sub(std::vector<std::string> str) {
 	Condition["Val3"] = str[++index];
 	Condition["Val4"] = str[++index];
 
-	skills["Condition"] = Condition;
 
 	// todo
 	// skills["Emotion"] = str[++index];
@@ -6442,7 +6408,7 @@ static void mob_skill_db_set_single(std::shared_ptr<s_mob_db> mob, std::shared_p
 
 	for (const auto &it : mob_skill->skills) {
 		if (mob->skill.size() >= MAX_MOBSKILL) {
-			ShowWarning("Monster '%s' (%d, src:%d) reaches max skill limit %d..\n", mob->sprite.c_str(), mob->vd.class_, mob_skill->mob_id, MAX_MOBSKILL);
+			ShowWarning("Monster '%s' (%d, src:%d) exceeds max skill limit %d..\n", mob->sprite.c_str(), mob->vd.class_, mob_skill->mob_id, MAX_MOBSKILL);
 			break;
 		}
 		mob->skill.push_back(it.second);
