@@ -6079,6 +6079,7 @@ static bool mob_read_sqlskilldb_sub(std::vector<std::string> str) {
 
 	YAML::Node skills;
 
+	// skills["Id"] = ;
 	skills["State"] = str[++index];
 	uint16 skill_id = static_cast<uint16>(std::stoul(str[++index]));
 
@@ -6116,8 +6117,9 @@ static bool mob_read_sqlskilldb_sub(std::vector<std::string> str) {
 
 	skills["Condition"] = Condition;
 
-	skills["Emotion"] = str[++index];
-	skills["Chat"] = std::stoi(str[++index]);
+	// todo
+	// skills["Emotion"] = str[++index];
+	// skills["Chat"] = str[++index];
 
 	node["Skills"] = skills;
 
@@ -6161,8 +6163,8 @@ static int mob_read_sqlskilldb(void)
 					data.push_back(str);
 			}
 
-			if (!mob_read_sqlskilldb_sub(data))
-				continue;
+			// if (!mob_read_sqlskilldb_sub(data))
+				// continue;
 
 			count++;
 		}
@@ -6433,9 +6435,7 @@ static void mob_drop_ratio_adjust(void){
  * @param skill Monster skill entries
  **/
 static void mob_skill_db_set_single(std::shared_ptr<s_mob_db> mob, std::shared_ptr<s_mob_skill_db> mob_skill) {
-	nullpo_retv(mob_skill);
-
-	if (mob == nullptr)
+	if (mob == nullptr || mob_skill == nullptr)
 		return;
 	if (mob_skill->skills.empty())
 		return;
@@ -6455,7 +6455,8 @@ static void mob_skill_db_set_single(std::shared_ptr<s_mob_db> mob, std::shared_p
 static void mob_skill_db_set(void) {
 	for (const auto &mob_skill : mob_skill_db) {
 		std::shared_ptr<s_mob_skill_db> skill = mob_skill.second;
-		nullpo_retv(skill);
+		if (skill == nullptr)
+			continue;
 
 		// Specific monster
 		if (skill->mob_id >= 0) {
@@ -6489,11 +6490,6 @@ static void mob_skill_db_set(void) {
  */
 static void mob_load(void)
 {
-	const char* dbsubpath[] = {
-		"",
-		"/" DBIMPORT,
-	};
-
 	// First we parse all the possible monsters to add additional data in the second loop
 	if( db_use_sqldbs )
 		mob_read_sqldb();
@@ -6501,33 +6497,9 @@ static void mob_load(void)
 		mob_db.load();
 
 	mob_chat_db.load();	// load before mob_skill_db
-
-	for(int i = 0; i < ARRAYLENGTH(dbsubpath); i++){	
-		int n1 = strlen(db_path)+strlen(dbsubpath[i])+1;
-		int n2 = strlen(db_path)+strlen(DBPATH)+strlen(dbsubpath[i])+1;
-
-		char* dbsubpath1 = (char*)aMalloc(n1+1);
-		char* dbsubpath2 = (char*)aMalloc(n2+1);
-		bool silent = i > 0;
-
-		if(i==0) {
-			safesnprintf(dbsubpath1,n1,"%s%s",db_path,dbsubpath[i]);
-			safesnprintf(dbsubpath2,n2,"%s/%s%s",db_path,DBPATH,dbsubpath[i]);
-		} else {
-			safesnprintf(dbsubpath1,n1,"%s%s",db_path,dbsubpath[i]);
-			safesnprintf(dbsubpath2,n1,"%s%s",db_path,dbsubpath[i]);
-		}
-
-
-
-		aFree(dbsubpath1);
-		aFree(dbsubpath2);
-	}
-
 	mob_item_drop_ratio.load();
 	mob_avail_db.load();
 	mob_summon_db.load();
-
 	mob_drop_ratio_adjust();
 
 	if (battle_config.mob_skill_rate == 0)
