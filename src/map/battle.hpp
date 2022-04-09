@@ -423,7 +423,6 @@ struct Battle_Config
 	int display_hallucination;	// [Skotlex]
 	int use_statpoint_table;	// [Skotlex]
 
-	int berserk_cancels_buffs; // [Aru]
 	int debuff_on_logout; // Removes a few "official" negative Scs on logout. [Skotlex]
 	int mob_ai; //Configures various mob_ai settings to make them smarter or dumber(official). [Skotlex]
 	int hom_setting; //Configures various homunc settings which make them behave unlike normal characters.. [Skotlex]
@@ -558,8 +557,6 @@ struct Battle_Config
 	int vip_exp_penalty_job;
 	int vip_disp_rate;
 	int mon_trans_disable_in_gvg;
-	int emblem_woe_change;
-	int emblem_transparency_limit;
 	int discount_item_point_shop;
 	int update_enemy_position;
 	int devotion_rdamage;

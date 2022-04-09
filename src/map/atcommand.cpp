@@ -26,6 +26,7 @@
 
 #include "achievement.hpp"
 #include "battle.hpp"
+#include "buyingstore.hpp"
 #include "channel.hpp"
 #include "chat.hpp"
 #include "chrif.hpp"
@@ -53,6 +54,7 @@
 #include "script.hpp"
 #include "storage.hpp"
 #include "trade.hpp"
+#include "vending.hpp"
 
 using namespace rathena;
 
@@ -103,7 +105,7 @@ public:
 
 	void clear() override;
 	const std::string getDefaultLocation() override;
-	uint64 parseBodyNode( const YAML::Node& node ) override;
+	uint64 parseBodyNode( const ryml::NodeRef& node ) override;
 
 	// Additional
 	const char* checkAlias( const char* alias );
@@ -118,7 +120,7 @@ const std::string AtcommandAliasDatabase::getDefaultLocation(){
 	return std::string(conf_path) + "/atcommands.yml";
 }
 
-uint64 AtcommandAliasDatabase::parseBodyNode( const YAML::Node& node ){
+uint64 AtcommandAliasDatabase::parseBodyNode( const ryml::NodeRef& node ){
 	std::string command;
 
 	if( !this->asString( node, "Command", command ) ){
@@ -151,15 +153,16 @@ uint64 AtcommandAliasDatabase::parseBodyNode( const YAML::Node& node ){
 	}
 
 	if( this->nodeExists( node, "Aliases" ) ){
-		const YAML::Node& aliasesNode = node["Aliases"];
+		const auto& aliasesNode = node["Aliases"];
 
-		if( !aliasesNode.IsSequence() ){
+		if( !aliasesNode.is_seq() ){
 			this->invalidWarning( aliasesNode, "Aliases should be a sequence.\n" );
 			return 0;
 		}
 
 		for( const auto& subNode : aliasesNode ){
-			std::string alias = subNode.as<std::string>();
+			std::string alias;
+			subNode >> alias;
 
 			info->aliases.insert( alias );
 			this->aliases[alias] = command;
@@ -1012,7 +1015,7 @@ ACMD_FUNC(speed)
 	} else
 		clif_displaymessage(fd, msg_txt(sd,389)); // Speed returned to normal.
 
-	status_calc_bl(&sd->bl, SCB_SPEED);
+	status_calc_bl(&sd->bl, { SCB_SPEED });
 
 	return 0;
 }
@@ -4481,6 +4484,8 @@ ACMD_FUNC(mapinfo) {
 		strcat(atcmd_output, " NoTrade |");
 	if (map_getmapflag(m_id, MF_NOVENDING))
 		strcat(atcmd_output, " NoVending |");
+	if (map_getmapflag(m_id, MF_NOBUYINGSTORE))
+		strcat(atcmd_output, " NoBuyingstore |");
 	if (map_getmapflag(m_id, MF_NODROP))
 		strcat(atcmd_output, " NoDrop |");
 	if (map_getmapflag(m_id, MF_NOSKILL))
@@ -6384,13 +6389,9 @@ ACMD_FUNC(autotrade) {
 		sd->state.block_action |= PCBLOCK_IMMUNE;
 
 	if( sd->state.vending ){
-		if( Sql_Query( mmysql_handle, "UPDATE `%s` SET `autotrade` = 1 WHERE `id` = %d;", vendings_table, sd->vender_id ) != SQL_SUCCESS ){
-			Sql_ShowDebug( mmysql_handle );
-		}
+		vending_update(*sd);
 	}else if( sd->state.buyingstore ){
-		if( Sql_Query( mmysql_handle, "UPDATE `%s` SET `autotrade` = 1 WHERE `id` = %d;", buyingstores_table, sd->buyer_id ) != SQL_SUCCESS ){
-			Sql_ShowDebug( mmysql_handle );
-		}
+		buyingstore_update(*sd);
 	}
 
 	if( battle_config.at_timeout ) {
@@ -10675,6 +10676,36 @@ ACMD_FUNC( stylist ){
 #endif
 }
 
+/**
+ * Add fame point(s) to a player
+ * Usage: @addfame <amount>
+ */
+ACMD_FUNC(addfame)
+{
+	nullpo_retr(-1, sd);
+
+	int famepoint = 0;
+
+	memset(atcmd_output, '\0', sizeof(atcmd_output));
+
+	if (!message || !*message || sscanf(message, "%11d", &famepoint) < 1 || famepoint == 0) {
+		sprintf(atcmd_output, msg_txt(sd, 1516), command); // Usage: %s <fame points>.
+		clif_displaymessage(fd, atcmd_output);
+		return -1;
+	}
+
+	if (!pc_addfame(*sd, famepoint)) {
+		sprintf(atcmd_output, msg_txt(sd, 1517), job_name(sd->status.class_)); // Cannot add fame to class '%s'.
+		clif_displaymessage(fd, atcmd_output);
+		return -1;
+	}
+
+	sprintf(atcmd_output, msg_txt(sd, 1518), famepoint, sd->status.name); // %d points were added to '%s'.
+	clif_displaymessage(fd, atcmd_output);
+
+	return 0;
+}
+
 #include "../custom/atcommand.inc"
 
 /**
@@ -10996,6 +11027,7 @@ void atcommand_basecommands(void) {
 		ACMD_DEF2("checkquest", quest),
 		ACMD_DEF(refineui),
 		ACMD_DEFR(stylist, ATCMD_NOCONSOLE|ATCMD_NOAUTOTRADE),
+		ACMD_DEF(addfame),
 	};
 	AtCommandInfo* atcommand;
 	int i;
